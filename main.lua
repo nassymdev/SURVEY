@@ -1,4 +1,4 @@
--- hey thunder yes i'm having one file as always ;)
+
 
 local BOARD = { x = 0, y = 0, w = 220, h = 220 }
 local BOARD_ORIGINAL = { w = 220, h = 220 }
@@ -7,14 +7,14 @@ local boxAnimTime = 0
 local boxAnimDuration = 0
 local isBoxAnimating = false
 
-local PLAYER = { x = 0, y = 0, w = 16, h = 16, speed = 200, hp = 10000000000, hpMax = 100000000, iFrames = 0, iDur = 0.8 }
+local PLAYER = { x = 0, y = 0, w = 16, h = 16, speed = 200, hp = 500, hpMax = 500, iFrames = 0, iDur = 0.8 }
 local soulImg, attacksImg, attackQuads = nil, nil, {}
 local gasterBlasterImg, gasterBlasterQuads = nil, {}
 local attacks = {}
 local afterimages = {}
 local time, spawnTimer, spawnInterval = 0, 0, 1.2
 local gameOver, paused, transitionActive = false, false, true
-local fontSmall, fontLarge
+local fontSmall, fontLarge, fontBold
 local isFullscreen = false
 
 local cam = { x = 0, y = 0, scale = 1, targetScale = 1, timer = 0 }
@@ -35,6 +35,11 @@ local transition = {
   maxAfterimages = 8,
   spawnRate = 0.05
 }
+
+
+local soulAfterimages = {}
+local soulAfterimageTimer = 0
+local soulAfterimageInterval = 0.05
 
 local attackPatterns = {
   "bones_horizontal",
@@ -69,6 +74,26 @@ local sounds = {
 local musicVolume = 0.7
 local sfxVolume = 0.8
 
+
+local introActive = true
+local introVideo = nil
+local introBox = { x = 0, y = 0, w = 400, h = 200, border = 4 }
+local introText = {
+    "Welcome to the battle arena,",
+    "Where your skills will be tested...",
+    "Prepare yourself for what's to come!",
+    "The battle begins now!",
+    "oh by the way",
+    "thunderedge",
+    "i will not hold back",
+    
+}
+local currentTextLine = 1
+local textDisplayTimer = 0
+local textDisplayInterval = 3.0 
+local videoScale = 1.0
+local videoAlpha = 1.0
+
 local function clamp(v, a, b) return math.max(a, math.min(b, v)) end
 local function lerp(a, b, t) return a + (b - a) * t end
 
@@ -97,11 +122,24 @@ local function resetBoxSize()
   animateBoxTo(BOARD_ORIGINAL.w, BOARD_ORIGINAL.h, 0.8)
 end
 
+local function loadIntroVideo()
+    pcall(function()
+        if love.filesystem.getInfo('furina.ogv') then
+            introVideo = love.graphics.newVideo('furina.ogv')
+            introVideo:play()
+            introVideo:setLooping(true)
+        else
+            print("Video file not found. Looking for: furina.ogv")
+        end
+    end)
+end
+
 local function resetGame()
   attacks = {}
   afterimages = {}
   time, spawnTimer, spawnInterval = 0, 0, 1.2
-  gameOver, paused, transitionActive = false, false, true
+  gameOver, paused = false, false
+  transitionActive = true  
   PLAYER.hp = PLAYER.hpMax
   PLAYER.iFrames = 0
   patternCooldown = 0
@@ -122,9 +160,20 @@ local function resetGame()
   patternTimer = 0
   
   
+  introActive = true
+  currentTextLine = 1
+  textDisplayTimer = 0
+  videoAlpha = 1.0
+  
+  
+  if introVideo then
+      introVideo:rewind()
+      introVideo:play()
+  end
+  
+  
   if sounds.music then
-    sounds.music:stop()
-    sounds.music:play()
+      sounds.music:stop()
   end
 end
 
@@ -537,21 +586,51 @@ local function spawnBlasterSweep()
 end
 
 function love.load()
+  love.window.setFullscreen(true)
   love.window.setTitle('Aggressive Deltarune Combat with Animated Gaster Blasters')
   love.graphics.setDefaultFilter('nearest','nearest')
   fontSmall = love.graphics.newFont(12)
   fontLarge = love.graphics.newFont(22)
+  fontBold = love.graphics.newFont(18) 
+  
   loadAssets()
   loadAudio()
+  
+  
+  loadIntroVideo()
+  
   resetGame()
   
   
-  if sounds.music then
-      sounds.music:play()
-  end
+  introActive = true
 end
 
 function love.keypressed(key)
+  if introActive then
+    if key == 'space' then
+        
+        currentTextLine = currentTextLine + 1
+        
+        
+        if currentTextLine > #introText then
+            introActive = false
+            transitionActive = true
+            if sounds.music then
+                sounds.music:play()
+            end
+        end
+        return
+    elseif key == 'return' then
+        
+        introActive = false
+        transitionActive = true
+        if sounds.music then
+            sounds.music:play()
+        end
+        return
+    end
+  end
+
   if key == 'escape' then love.event.quit() end
   if key == 'p' then 
     paused = not paused 
@@ -602,6 +681,15 @@ function love.keypressed(key)
 end
 
 function love.update(dt)
+  if introActive then
+    
+    if introVideo then
+        videoAlpha = math.min(1.0, videoAlpha + dt * 2)
+    end
+    
+    return 
+  end
+
   if paused or gameOver then return end
 
   if transitionActive then
@@ -675,6 +763,27 @@ function love.update(dt)
   if dx ~= 0 and dy ~= 0 then local inv = 1/math.sqrt(2); dx,dy = dx*inv, dy*inv end
   PLAYER.x = clamp(PLAYER.x + dx * PLAYER.speed * dt, BOARD.x, BOARD.x + BOARD.w - PLAYER.w)
   PLAYER.y = clamp(PLAYER.y + dy * PLAYER.speed * dt, BOARD.y, BOARD.y + BOARD.h - PLAYER.h)
+
+  
+  soulAfterimageTimer = soulAfterimageTimer + dt
+  if soulAfterimageTimer >= soulAfterimageInterval then
+    soulAfterimageTimer = 0
+    table.insert(soulAfterimages, {
+      x = PLAYER.x,
+      y = PLAYER.y,
+      alpha = 0.7,
+      life = 0.3
+    })
+  end
+
+  
+  for i = #soulAfterimages, 1, -1 do
+    soulAfterimages[i].life = soulAfterimages[i].life - dt
+    soulAfterimages[i].alpha = soulAfterimages[i].alpha - dt * 2.5
+    if soulAfterimages[i].life <= 0 then
+      table.remove(soulAfterimages, i)
+    end
+  end
 
   spawnTimer = spawnTimer + dt
   if spawnTimer >= spawnInterval and patternCooldown <= 0 then
@@ -796,10 +905,6 @@ function love.update(dt)
       elseif att.phase == "disappearing" then
         att.scale = math.max(0, att.scale - dt * 6)
       end
-      
-      
-      
-
     end
     
     if att.type == "bone" and not att.charging then
@@ -863,7 +968,49 @@ function love.update(dt)
     local canHit = true
     if att.type == "bone" and not att.charging then canHit = false end
     if att.type == "laser" and not att.active then canHit = false end
-    if att.type == "gaster_blaster" then canHit = false end
+    
+    
+    if att.type == "gaster_blaster" and att.beam.active then
+      
+      local beamWorldX = att.x + math.cos(att.angle - math.pi/2) * (att.h/2 - 5)
+      local beamWorldY = att.y + math.sin(att.angle - math.pi/2) * (att.h/2 - 5)
+      
+      
+      local beamCos = math.cos(att.angle - math.pi/2)
+      local beamSin = math.sin(att.angle - math.pi/2)
+      
+      
+      local beamEndX = beamWorldX + beamCos * att.beam.length
+      local beamEndY = beamWorldY + beamSin * att.beam.length
+      
+      
+      local playerCenterX = PLAYER.x + PLAYER.w/2
+      local playerCenterY = PLAYER.y + PLAYER.h/2
+      
+      
+      local toPlayerX = playerCenterX - beamWorldX
+      local toPlayerY = playerCenterY - beamWorldY
+      
+      
+      local projection = toPlayerX * beamCos + toPlayerY * beamSin
+      
+      
+      if projection >= 0 and projection <= att.beam.length then
+        
+        local perpDistance = math.abs(toPlayerX * (-beamSin) + toPlayerY * beamCos)
+        
+        
+        if perpDistance <= att.beam.h/2 then
+          canHit = true
+        else
+          canHit = false
+        end
+      else
+        canHit = false
+      end
+    elseif att.type == "gaster_blaster" then
+      canHit = false
+    end
     
     if canHit and checkCollision(att.x, att.y, att.w, att.h, PLAYER.x, PLAYER.y, PLAYER.w, PLAYER.h) then
       damagePlayer(15)
@@ -876,6 +1023,66 @@ function love.update(dt)
 end
 
 function love.draw()
+  if introActive then
+    love.graphics.clear(0, 0, 0)
+    
+    
+    if introVideo then
+        local vidWidth, vidHeight = introVideo:getDimensions()
+        
+        local fixedScale = 0.7
+        local drawWidth = vidWidth * fixedScale
+        local drawHeight = vidHeight * fixedScale
+        
+        love.graphics.setColor(1, 1, 1, videoAlpha)
+        love.graphics.draw(introVideo, 
+                          love.graphics.getWidth()/2 - drawWidth/2,
+                          love.graphics.getHeight()/2 - drawHeight/2 - 50, 
+                          0, fixedScale, fixedScale)
+    else
+        
+        love.graphics.setColor(0.2, 0.2, 0.8, 0.7)
+        love.graphics.rectangle('fill', love.graphics.getWidth()/2 - 200, love.graphics.getHeight()/2 - 150, 400, 300)
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.setFont(fontLarge)
+        love.graphics.printf("INTRO VIDEO", love.graphics.getWidth()/2 - 200, love.graphics.getHeight()/2 - 20, 400, 'center')
+    end
+    
+    
+    introBox.x = love.graphics.getWidth()/2 - introBox.w/2
+    introBox.y = love.graphics.getHeight() - introBox.h - 20  
+    
+    love.graphics.setColor(0, 0, 0, 0.8)
+    love.graphics.rectangle('fill', introBox.x, introBox.y, introBox.w, introBox.h)
+    
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.setLineWidth(introBox.border)
+    love.graphics.rectangle('line', introBox.x, introBox.y, introBox.w, introBox.h)
+    
+    
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.setFont(fontBold)
+    love.graphics.printf(introText[currentTextLine], 
+                        introBox.x + 20, 
+                        introBox.y + introBox.h/2 - 15, 
+                        introBox.w - 40, 'center')
+    
+    
+    love.graphics.setFont(fontSmall)
+    love.graphics.printf("(" .. currentTextLine .. "/" .. #introText .. ")", 
+                        introBox.x, 
+                        introBox.y + introBox.h - 25, 
+                        introBox.w, 'center')
+    
+    
+    love.graphics.printf("Press SPACE to continue, ENTER to skip", 
+                        0, 
+                        love.graphics.getHeight() - 20, 
+                        love.graphics.getWidth(), 'center')
+    
+    return 
+  end
+
   love.graphics.clear(0,0,0)
   
   local shakeX, shakeY = 0, 0
@@ -929,6 +1136,21 @@ function love.draw()
   love.graphics.setLineWidth(4)
   love.graphics.setColor(0, borderIntensity, 0)
   love.graphics.rectangle('line', BOARD.x, BOARD.y, BOARD.w, BOARD.h)
+  
+  
+  if introVideo then
+      local vidWidth, vidHeight = introVideo:getDimensions()
+      
+      local fixedScale = 0.4
+      local drawWidth = vidWidth * fixedScale
+      local drawHeight = vidHeight * fixedScale
+      
+      love.graphics.setColor(1, 1, 1, 0.6) 
+      love.graphics.draw(introVideo, 
+                        love.graphics.getWidth()/2 - drawWidth/2,
+                        BOARD.y - drawHeight - 20, 
+                        0, fixedScale, fixedScale)
+  end
 
   for _, att in ipairs(attacks) do
     local isWarning = (att.currentTime or 0) < (att.warningTime or 0)
@@ -978,7 +1200,6 @@ function love.draw()
       end
       
       
-      
       if att.beam.active then
         local mouthY = att.h/2 - 5  
 
@@ -992,7 +1213,6 @@ function love.draw()
         love.graphics.rectangle('fill', -att.beam.h/2 - 2, mouthY - 2, att.beam.h + 4, att.beam.length + 4)
       end
 
-      
       love.graphics.pop()
       
     else
@@ -1068,6 +1288,17 @@ function love.draw()
     end
   end
 
+  
+  for _, ai in ipairs(soulAfterimages) do
+    if soulImg then
+      love.graphics.setColor(1, 1, 1, ai.alpha)
+      love.graphics.draw(soulImg, ai.x, ai.y)
+    else
+      love.graphics.setColor(1, 0.25, 0.3, ai.alpha)
+      love.graphics.rectangle('fill', ai.x, ai.y, PLAYER.w, PLAYER.h)
+    end
+  end
+
   local playerVisible = true
   if PLAYER.iFrames > 0 then
     playerVisible = math.floor(time * 15) % 2 == 0
@@ -1082,6 +1313,26 @@ function love.draw()
       love.graphics.rectangle('fill', PLAYER.x, PLAYER.y, PLAYER.w, PLAYER.h)
     end
   end
+
+  
+  local hpBarWidth = 200
+  local hpBarHeight = 15
+  local hpBarX = BOARD.x + BOARD.w/2 - hpBarWidth/2
+  local hpBarY = BOARD.y + BOARD.h + 20
+  
+  
+  love.graphics.setColor(0.2, 0.2, 0.2)
+  love.graphics.rectangle('fill', hpBarX, hpBarY, hpBarWidth, hpBarHeight)
+  
+  
+  local hpRatio = PLAYER.hp / PLAYER.hpMax
+  love.graphics.setColor(1 - hpRatio, hpRatio, 0)
+  love.graphics.rectangle('fill', hpBarX, hpBarY, hpBarWidth * hpRatio, hpBarHeight)
+  
+  
+  love.graphics.setColor(1, 1, 1)
+  love.graphics.setLineWidth(2)
+  love.graphics.rectangle('line', hpBarX, hpBarY, hpBarWidth, hpBarHeight)
 
   love.graphics.setColor(1,1,1)
   love.graphics.setFont(fontSmall)
